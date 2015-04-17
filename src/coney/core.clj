@@ -1,43 +1,9 @@
 (ns coney.core
   (:gen-class)
   (:require [clojure.edn :as edn]
-            [clojure.data.codec.base64 :as b64]
-            [digest]
             [org.httpkit.client :as http]
-            [cheshire.core :as cheshire])
-)
-
-; http://stackoverflow.com/a/10065003
-(defn hexify [s]
-  (apply str (map #(format "%02x" %) s)))
-
-(defn unhexify [s]
-  (let [bytes (into-array Byte/TYPE
-                 (map (fn [[x y]]
-                    (unchecked-byte (Integer/parseInt (str x y) 16)))
-                       (partition 2 s)))]
-    bytes))
-
-; based on https://gist.github.com/christianclinton/faa1aef119a0919aeb2e
-(defn decode_rabbit_password_hash [password_hash]
-  (let [password_hash (b64/decode (.getBytes password_hash))
-        decoded_hash (hexify password_hash)]
-        [(apply str (take 8 decoded_hash)) (apply str (drop 8 decoded_hash))]
-  )
-)
-
-(defn encode_rabbit_password_hash [salt password]
-  (let [salt_and_password (unhexify (str salt (hexify (.getBytes password "UTF-8"))))
-        salted_md5 (digest/md5 salt_and_password)]
-    (String. (b64/encode (unhexify (str salt salted_md5))))
-  )
-)
-
-(defn check_rabbit_password [test_password password_hash]
-  (let [[salt hash_md5sum] (decode_rabbit_password_hash password_hash)
-        test_password_hash (encode_rabbit_password_hash salt test_password)]
-    (= test_password_hash password_hash)
-  )
+            [cheshire.core :as cheshire]
+            [coney.rabbit-password :as rp])
 )
 
 (def root "http://localhost:15672/api/")
@@ -135,7 +101,7 @@
         wanted-vhosts (get-names-from-hash :vhosts config)
         ]
     (doseq [user (keys wanted-users)]
-      (if (or (not (contains? existing-users user)) (not (check_rabbit_password (:password (user wanted-users)) (:password_hash (user existing-users)))))
+      (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password (:password (user wanted-users)) (:password_hash (user existing-users)))))
         (do
           (println "missing" user)
           (expected-code @(http/put
