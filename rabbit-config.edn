@@ -1,0 +1,61 @@
+{
+ :users
+   [{:name "customer",
+   :password "customer"}
+  {:name "chef",
+   :password "chef"}],
+ :vhosts
+   [{:name "/"
+     :permissions
+       [{:configure "",
+         :write "",
+         :user "chef",
+         :read "orders.hoxton",
+         }
+        {:read "",
+         :write "orders",
+         :user "customer",
+         :configure ""}]
+     :queues
+       [{:name "orders.hoxton",
+         :arguments {},
+         :durable true,
+         :auto_delete false}],
+     :exchanges
+       [{:arguments {},
+         :internal false,
+         :type "topic",
+         :name "orders-topic",
+         :auto_delete false,
+         :durable true}
+        {:name "orders",
+         :arguments {},
+         :type "direct",
+         :internal false,
+         :durable true,
+         :auto_delete false}
+        {:name "orders-headers",
+         :arguments {},
+         :type "headers",
+         :internal false,
+         :auto_delete false,
+         :durable true}],
+     :bindings
+       [{:destination "orders.hoxton",
+         :destination_type "queue",
+         :arguments {},
+         :routing_key "",
+         :source "orders"}
+        {:destination "orders.hoxton",
+         :destination_type "queue",
+         :arguments {:Foo "Bar", :x-match "all"},
+         :source "orders-headers",
+         :routing_key ""}
+        {:source "orders-topic",
+         :routing_key "foo.*.baz",
+         :arguments {},
+         :destination_type "queue",
+         :destination "orders.hoxton"
+         }]
+    }]
+}
