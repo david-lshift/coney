@@ -96,6 +96,7 @@
 (def cli-options [
                   ["-h" "--help"]
                   [nil "--host HOST" :default "localhost"]
+                  ["-f" "--filetype FILETYPE" :default :edn :parse-fn #(keyword %)]
                   ])
 
 (defn exit [status msg]
@@ -107,11 +108,19 @@
        (join \newline errors)))
 
 (defn usage [options-summary]
-  (join \newline (cons "Usage: " options-summary))
+  (str "Usage: \n" options-summary)
 )
 
 (defn file-exists [path]
   (.exists (clojure.java.io/as-file path))
+)
+
+(defn parse-file [filetype data]
+  (case filetype
+    :edn (edn/read-string data)
+    :json (cheshire/parse-string data true)
+    (throw (RuntimeException. (format "Don't know file format '%s'" (name filetype))))
+  )
 )
 
 (defn -main
@@ -123,7 +132,7 @@
         errors (exit 1 (error-msg errors))
         (not= (count arguments) 1) (exit 1 (format "Need a single file argument, but got %d arguments" (count arguments)))
         (not (file-exists (first arguments))) (exit 1 (error-msg [(format "No such file '%s'" (first arguments))]))
-        :default (let [config (-> arguments first slurp edn/read-string)
+        :default (let [config (->> arguments first slurp (parse-file (:filetype options)))
           existing-users (get-names-from-api "users")
           wanted-users (get-names-from-hash :users config)
           existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str @root "vhosts") core-params) :body (cheshire/decode true)))

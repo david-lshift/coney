@@ -64,7 +64,7 @@
                                         [core/exit (fn [code msg] (println (format "Exit with arg: %d and msg '%s'" code msg)))]
                                         ?form ))]
 
-    (fact "Does help" (with-out-str (core/-main "--help")) => (every-checker (contains "Exit with arg: 0") (contains "Usage")))
+    (fact "Does help" (with-out-str (core/-main "--help")) => (every-checker (contains "Exit with arg: 0") (contains "Usage") (contains "--filetype FILETYPE")))
 
     (fact "Needs an argument" (with-out-str (core/-main)) => (contains "Need a single file argument"))
 
@@ -98,6 +98,22 @@
                      :password \"chef\"}]}")
              ]
             (core/-main "Foo")))) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'")))
+
+    (fact "Does JSON"
+        (with-fake-http [(no-vhost) "{}"
+                         {:method :put :url "http://localhost:15672/api/users/customer"} {:status 204}
+                         {:method :put :url "http://localhost:15672/api/users/chef"} {:status 204}]
+          (with-out-str (with-redefs
+            [
+             core/file-exists (fn [path] true)
+             slurp (fn [& _] "{
+                     \"users\" :
+                     [{\"name\" : \"customer\",
+                     \"password\" : \"customer\"},
+                     {\"name\" : \"chef\",
+                     \"password\" : \"chef\"}]}")
+             ]
+            (core/-main "--filetype" "json" "Foo")))) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'")))
 
     (fact "Does VHosts"
           (with-fake-http [
