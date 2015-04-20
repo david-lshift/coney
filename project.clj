@@ -15,7 +15,7 @@
                  ]
   :plugins [
             [lein-midje "3.0.0"]
-            [lein-cloverage "1.0.3-SNAPSHOT"]
+            [lein-cloverage "1.0.2"]
             ]
   :main ^:skip-aot coney.core
   :target-path "target/%s"
