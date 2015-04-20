@@ -10,7 +10,7 @@
                  [http-kit "2.1.16"]
                  [http-kit.fake "0.2.1"]
                  [cheshire "5.4.0"]
-                 [midje "1.6.3"]
+                 [midje "1.7.0-beta1"]
                  [org.clojure/tools.cli "0.3.1"]
                  ]
   :plugins [
