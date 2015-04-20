@@ -3,7 +3,9 @@
   (:require [clojure.edn :as edn]
             [org.httpkit.client :as http]
             [cheshire.core :as cheshire]
-            [coney.rabbit-password :as rp])
+            [coney.rabbit-password :as rp]
+            [clojure.tools.cli :refer [parse-opts]]
+            [clojure.string :refer [join]])
 )
 
 (def root "http://localhost:15672/api/")
@@ -27,6 +29,7 @@
 (defn expected-code [resp code]
   (if (not= (:status resp) code)
     (do
+      (println (format "Wanted HTTP code %d but got %d" code (:status resp)))
       (println resp)
       (throw (RuntimeException. (str resp)))
     )
@@ -59,7 +62,7 @@
 				:let [wanted-keys (select-keys (item wanted) sync-keys)]]
 			(if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
 				(do
-					(println "missing/wrong" kind (name item))
+					(println (format "missing/wrong %s for '%s'" kind (name item)))
 					(expected-code @(http/put
 								   (str root kind "/" vhost-encoded "/" (name item))
 								   (merge core-params {:body (cheshire/encode wanted-keys)}))
@@ -77,7 +80,7 @@
               wanted-keys (select-keys wanted-item sync-keys)]]
 			(if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
 				(do
-					(println "missing/wrong bindings" (name item))
+					(println (format "missing/wrong bindings for '%s'" (name item)))
 					(expected-code @(http/post
 								   (str root "bindings/" vhost-encoded "/e/" (:source wanted-item) "/q/" (:destination wanted-item))
 								   (merge core-params {:body (cheshire/encode wanted-keys)}))
@@ -89,61 +92,89 @@
 )
 
 (defn get-bindings-from-hash [hash]
-  (hash-map (keyword (clojure.string/join "-" (map #(% hash) [:destination :destination_type :arguments :routing_key :source]))) hash)
+  (hash-map (keyword (join "-" (map #(% hash) [:destination :destination_type :arguments :routing_key :source]))) hash)
+)
+
+(def cli-options [
+                  ["-h" "--help"]])
+
+(defn exit [status msg]
+  (println msg)
+  (System/exit status))
+
+(defn error-msg [errors]
+  (str "The following errors occurred while parsing your command:\n\n"
+       (join \newline errors)))
+
+(defn usage [options-summary]
+  (join \newline (cons "Usage: " options-summary))
+)
+
+(defn file-exists [path]
+  (.exists (clojure.java.io/as-file path))
 )
 
 (defn -main
   [& args]
-  (let [config (-> args first slurp edn/read-string)
-        existing-users (get-names-from-api "users")
-        wanted-users (get-names-from-hash :users config)
-        existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str root "vhosts") core-params) :body (cheshire/decode true)))
-        wanted-vhosts (get-names-from-hash :vhosts config)
-        ]
-    (doseq [user (keys wanted-users)]
-      (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password (:password (user wanted-users)) (:password_hash (user existing-users)))))
-        (do
-          (println "missing" user)
-          (expected-code @(http/put
-                           (str root "users/" (name user))
-                           (merge core-params {:body (cheshire/encode {:tags "" :password (:password (user wanted-users))})}))
-                         204)
+  (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
+      ;; Handle help and error conditions
+      (cond
+        (:help options) (exit 0 (usage summary))
+        errors (exit 1 (error-msg errors))
+        (not= (count arguments) 1) (exit 1 "Need a single file argument")
+        (not (file-exists (first arguments))) (exit 1 (error-msg [(format "No such file '%s'" (first arguments))]))
+        :default (let [config (-> arguments first slurp edn/read-string)
+          existing-users (get-names-from-api "users")
+          wanted-users (get-names-from-hash :users config)
+          existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str root "vhosts") core-params) :body (cheshire/decode true)))
+          wanted-vhosts (get-names-from-hash :vhosts config)
+          ]
+          (doseq [user (keys wanted-users)]
+            (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password (:password (user wanted-users)) (:password_hash (user existing-users)))))
+              (do
+                (println (format "missing user '%s'" (name user)))
+                (expected-code @(http/put
+                                 (str root "users/" (name user))
+                                 (merge core-params {:body (cheshire/encode {:tags "" :password (:password (user wanted-users))})}))
+                               204)
+                )
+              )
           )
+          (doseq [vhost (keys wanted-vhosts)]
+            (if (not (.contains existing-vhosts vhost))
+              (do
+                (println (format "missing vhost '%s'" (name vhost)))
+                (expected-code @(http/put
+                                 (str root "vhosts/" (name vhost))
+                                 core-params)
+                               204)
+                )
+            )
+            (let [vhost-encoded (http/url-encode (name vhost))
+                  vhost-config (vhost wanted-vhosts)
+                  ]
+              (sync-config "permissions"
+                           (get-users-from-api "permissions")
+                           (get-users-from-hash :permissions vhost-config) vhost
+                           [:configure :write :read])
+              (sync-config "queues"
+                           (get-names-from-api (str "queues/" vhost-encoded))
+                           (get-names-from-hash :queues vhost-config) vhost
+                           [:arguments :durable :auto-delete])
+              (sync-config "exchanges"
+                           (get-names-from-api (str "exchanges/" vhost-encoded))
+                           (get-names-from-hash :exchanges vhost-config) vhost
+                           [:arguments :internal :type :auto_delete :durable])
+              (sync-bindings "bindings"
+                           (get-x-from-api get-bindings-from-hash "bindings")
+                           (apply merge (map get-bindings-from-hash (:bindings vhost-config)))
+                           vhost
+                           [:destination :destination_type :arguments :routing_key :source]
+              )
+            )
+          )
+          (println "All done")
         )
     )
-    (doseq [vhost (keys wanted-vhosts)]
-      (if (not (.contains existing-vhosts vhost))
-        (do
-          (println "missing vhost" vhost)
-          (expected-code @(http/put
-                           (str root "vhosts/" (name vhost))
-                           core-params)
-                         204)
-          )
-      )
-      (let [vhost-encoded (http/url-encode (name vhost))
-            vhost-config (vhost wanted-vhosts)
-            ]
-        (sync-config "permissions"
-                     (get-users-from-api "permissions")
-                     (get-users-from-hash :permissions vhost-config) vhost
-                     [:configure :write :read])
-        (sync-config "queues"
-                     (get-names-from-api (str "queues/" vhost-encoded))
-                     (get-names-from-hash :queues vhost-config) vhost
-                     [:arguments :durable :auto-delete])
-        (sync-config "exchanges"
-                     (get-names-from-api (str "exchanges/" vhost-encoded))
-                     (get-names-from-hash :exchanges vhost-config) vhost
-                     [:arguments :internal :type :auto_delete :durable])
-        (sync-bindings "bindings"
-                     (get-x-from-api get-bindings-from-hash "bindings")
-                     (apply merge (map get-bindings-from-hash (:bindings vhost-config)))
-                     vhost
-                     [:destination :destination_type :arguments :routing_key :source]
-        )
-      )
-    )
-    (println "All done")
   )
 )

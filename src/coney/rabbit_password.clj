@@ -30,8 +30,11 @@
 )
 
 (defn check-rabbit-password [test-password password-hash]
-  (let [[salt hash-md5sum] (decode-rabbit-password-hash password-hash)
-        test-password-hash (encode-rabbit-password-hash salt test-password)]
-    (= test-password-hash password-hash)
+  (if (contains? #{"" nil} password-hash)
+    false
+    (let [[salt hash-md5sum] (decode-rabbit-password-hash password-hash)
+          test-password-hash (encode-rabbit-password-hash salt test-password)]
+      (= test-password-hash password-hash)
+    )
   )
 )

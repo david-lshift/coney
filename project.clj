@@ -8,8 +8,15 @@
                  [org.clojure/data.codec "0.1.0"]
                  [digest "1.4.4"]
                  [http-kit "2.1.16"]
+                 [http-kit.fake "0.2.1"]
                  [cheshire "5.4.0"]
+                 [midje "1.6.3"]
+                 [org.clojure/tools.cli "0.3.1"]
                  ]
+  :plugins [
+            [lein-midje "3.0.0"]
+            [lein-cloverage "1.0.3-SNAPSHOT"]
+            ]
   :main ^:skip-aot coney.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
