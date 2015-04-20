@@ -8,7 +8,7 @@
             [clojure.string :refer [join]])
 )
 
-(def root "http://localhost:15672/api/")
+(def root (atom "http://localhost:15672/api/"))
 
 (defn get-key-from-hash [key hash]
   (hash-map (keyword (key hash)) hash)
@@ -21,8 +21,6 @@
 (defn get-user-from-hash [hash]
   (get-key-from-hash :user hash)
 )
-
-(apply merge (map get-name-from-hash (-> @(http/get (str root "users") {:basic-auth ["guest" "guest"]}) :body (cheshire/decode true))))
 
 (def core-params {:basic-auth ["guest" "guest"] :headers {"content-type" "application/json"}})
 
@@ -37,7 +35,7 @@
 )
 
 (defn- get-x-from-api [get-func api-key]
-   (apply merge (map get-func (-> @(http/get (str root api-key) core-params) :body (cheshire/decode true))))
+   (apply merge (map get-func (-> @(http/get (str @root api-key) core-params) :body (cheshire/decode true))))
 )
 
 (defn get-names-from-api [api-key]
@@ -64,7 +62,7 @@
 				(do
 					(println (format "missing/wrong %s for '%s'" kind (name item)))
 					(expected-code @(http/put
-								   (str root kind "/" vhost-encoded "/" (name item))
+								   (str @root kind "/" vhost-encoded "/" (name item))
 								   (merge core-params {:body (cheshire/encode wanted-keys)}))
 								 204)
 				)
@@ -82,7 +80,7 @@
 				(do
 					(println (format "missing/wrong bindings for '%s'" (name item)))
 					(expected-code @(http/post
-								   (str root "bindings/" vhost-encoded "/e/" (:source wanted-item) "/q/" (:destination wanted-item))
+								   (str @root "bindings/" vhost-encoded "/e/" (:source wanted-item) "/q/" (:destination wanted-item))
 								   (merge core-params {:body (cheshire/encode wanted-keys)}))
 								 201)
 				)
@@ -96,7 +94,9 @@
 )
 
 (def cli-options [
-                  ["-h" "--help"]])
+                  ["-h" "--help"]
+                  [nil "--host HOST" :default "localhost"]
+                  ])
 
 (defn exit [status msg]
   (println msg)
@@ -117,16 +117,16 @@
 (defn -main
   [& args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
-      ;; Handle help and error conditions
+      (reset! root (str "http://" (:host options) ":15672/api/"))
       (cond
         (:help options) (exit 0 (usage summary))
         errors (exit 1 (error-msg errors))
-        (not= (count arguments) 1) (exit 1 "Need a single file argument")
+        (not= (count arguments) 1) (exit 1 (format "Need a single file argument, but got %d arguments" (count arguments)))
         (not (file-exists (first arguments))) (exit 1 (error-msg [(format "No such file '%s'" (first arguments))]))
         :default (let [config (-> arguments first slurp edn/read-string)
           existing-users (get-names-from-api "users")
           wanted-users (get-names-from-hash :users config)
-          existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str root "vhosts") core-params) :body (cheshire/decode true)))
+          existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str @root "vhosts") core-params) :body (cheshire/decode true)))
           wanted-vhosts (get-names-from-hash :vhosts config)
           ]
           (doseq [user (keys wanted-users)]
@@ -134,7 +134,7 @@
               (do
                 (println (format "missing user '%s'" (name user)))
                 (expected-code @(http/put
-                                 (str root "users/" (name user))
+                                 (str @root "users/" (name user))
                                  (merge core-params {:body (cheshire/encode {:tags "" :password (:password (user wanted-users))})}))
                                204)
                 )
@@ -145,7 +145,7 @@
               (do
                 (println (format "missing vhost '%s'" (name vhost)))
                 (expected-code @(http/put
-                                 (str root "vhosts/" (name vhost))
+                                 (str @root "vhosts/" (name vhost))
                                  core-params)
                                204)
                 )

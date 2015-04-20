@@ -33,13 +33,18 @@
   ) => {:bar {:name "bar", :password_hash "foo", :tags ""}}
 )
 
-(defn no-vhost [request]
-  (contains? #{
-               "http://localhost:15672/api/users"
-               "http://localhost:15672/api/permissions"
-               "http://localhost:15672/api/bindings"
-               "http://localhost:15672/api/vhosts"}
-             (:url request))
+(defn no-vhost
+  ([] (no-vhost "localhost"))
+  ([hostname]
+  (fn [request]
+    (contains? #{
+                 (str "http://" hostname ":15672/api/users")
+                 (str "http://" hostname ":15672/api/permissions")
+                 (str "http://" hostname ":15672/api/bindings")
+                 (str "http://" hostname ":15672/api/vhosts")}
+               (:url request))
+    ))
+
 )
 
 (defn for-vhost [vhost]
@@ -61,7 +66,7 @@
 
     (fact "Does help" (with-out-str (core/-main "--help")) => (every-checker (contains "Exit with arg: 0") (contains "Usage")))
 
-    (fact "Needs an argument" (with-out-str (core/-main)) => (contains "Need a single file argument'"))
+    (fact "Needs an argument" (with-out-str (core/-main)) => (contains "Need a single file argument"))
 
     (fact "Copes with bad arguments" (with-out-str (core/-main "--garbage")) => (contains "Unknown option: \"--garbage\""))
 
@@ -70,8 +75,16 @@
                           (core/-main "Foo")
                           )) => (contains "No such file 'Foo'"))
 
+    (fact "Does alternate host"
+          (with-fake-http [(no-vhost "other-host") "{}"]
+            (with-out-str (with-redefs [slurp (fn [& _] "{}")
+                                        core/file-exists (fn [path] true)]
+                            (core/-main "--host" "other-host" "Foo")
+                            )))
+            => "All done\n")
+
     (fact "Does Users"
-        (with-fake-http [no-vhost "{}"
+        (with-fake-http [(no-vhost) "{}"
                          {:method :put :url "http://localhost:15672/api/users/customer"} {:status 204}
                          {:method :put :url "http://localhost:15672/api/users/chef"} {:status 204}]
           (with-out-str (with-redefs
@@ -88,7 +101,7 @@
 
     (fact "Does VHosts"
           (with-fake-http [
-                           no-vhost "{}"
+                           (no-vhost) "{}"
                       (for-vhost "some-vhost") "{}"
                       {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}]
         (with-out-str (with-redefs
@@ -100,7 +113,7 @@
 
     (fact "Does Existing VHosts"
           (with-fake-http ["http://localhost:15672/api/vhosts" "[{\"name\":\"some-vhost\"}]"
-                           no-vhost "{}"
+                           (no-vhost) "{}"
                       (for-vhost "some-vhost") "{}"
                       {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}]
         (with-out-str (with-redefs
@@ -111,7 +124,7 @@
             (core/-main "Foo")))) => "All done\n")
 
     (fact "Does Permissions"
-          (with-fake-http [no-vhost "{}"
+          (with-fake-http [(no-vhost) "{}"
                            (for-vhost "some-vhost") "{}"
                            {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                            {:method :put :url "http://localhost:15672/api/permissions/some-vhost/chef"} {:status 204}]
@@ -131,7 +144,7 @@
             (core/-main "Foo")))) => (contains "missing/wrong permissions for 'chef'"))
 
     (fact "Does Queues"
-        (with-fake-http [no-vhost "{}"
+        (with-fake-http [(no-vhost) "{}"
                          (for-vhost "some-vhost") "{}"
                          {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                          {:method :put :url "http://localhost:15672/api/queues/some-vhost/orders.hoxton"} {:status 204}]
@@ -150,7 +163,7 @@
               (core/-main "Foo"))) => (contains "missing/wrong queues for 'orders.hoxton'")))
 
     (fact "Does Exchanges"
-        (with-fake-http [no-vhost "{}"
+        (with-fake-http [(no-vhost) "{}"
                          (for-vhost "some-vhost") "{}"
                          {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                          {:method :put :url "http://localhost:15672/api/exchanges/some-vhost/orders-topic"} {:status 204}]
@@ -171,7 +184,7 @@
               (core/-main "Foo"))) => (contains "missing/wrong exchanges for 'orders-topic'")))
 
     (fact "Does Bindings"
-        (with-fake-http [no-vhost "{}"
+        (with-fake-http [(no-vhost) "{}"
                          (for-vhost "some-vhost") "{}"
                          {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                          {:method :post :url "http://localhost:15672/api/bindings/some-vhost/e/orders/q/orders.hoxton"} {:status 201}]
