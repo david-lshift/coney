@@ -1,11 +1,9 @@
 language: clojure
-install:
-  - pip install coveralls
 lein: lein2
-script: lein cloverage --coveralls
+script: lein midje
 jdk:
   - openjdk7
   - oraclejdk7
   - oraclejdk8
-after_success:
-  - coveralls
+after_script:
+  - bash -ex test/coveralls.sh
