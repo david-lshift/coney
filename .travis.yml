@@ -1,4 +1,6 @@
 language: clojure
+install:
+  - pip install coveralls
 lein: lein2
 script: lein cloverage --coveralls
 jdk:
