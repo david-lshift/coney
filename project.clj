@@ -10,11 +10,12 @@
                  [http-kit "2.1.16"]
                  [http-kit.fake "0.2.1"]
                  [cheshire "5.4.0"]
-                 [midje "1.7.0-beta1"]
+
+                 [midje "1.7.0-beta1" :exclusions [org.clojure/clojure]]
                  [org.clojure/tools.cli "0.3.1"]
                  ]
   :plugins [
-            [lein-midje "3.0.0"]
+            [lein-midje "3.1.3"]
             [lein-cloverage "1.0.2"]
             ]
   :main ^:skip-aot coney.core

@@ -1,5 +1,5 @@
 (ns coney.core-test
-  (:require [coney.core :as core]            )
+  (:require [coney.core :as core])
   (:use [midje.sweet]
         [org.httpkit.fake])
 )
@@ -114,6 +114,24 @@
                      \"password\" : \"chef\"}]}")
              ]
             (core/-main "--filetype" "json" "Foo")))) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'")))
+
+    (fact "Does export-style JSON"
+        (with-fake-http [(no-vhost) "{}"
+                         "http://localhost:15672/api/exchanges/%2F" {}
+                         {:method :put :url "http://localhost:15672/api/exchanges/%2F/orders-topic"} {:status 204}]
+          (with-out-str (with-redefs
+          [
+            core/file-exists (fn [path] true)
+            slurp (fn [& _] "{\"exchanges\" : [ {
+         \"vhost\" : \"foo\",
+         \"durable\" : true,
+         \"internal\" : false,
+         \"arguments\" : {},
+         \"type\" : \"topic\",
+         \"auto_delete\" : false,
+         \"name\" : \"orders-topic\"}]}")
+             ]
+            (core/-main "--filetype" "json" "Foo")))) => (every-checker (contains "missing/wrong exchanges for 'orders-topic' on 'foo'")))
 
     (fact "Does VHosts"
           (with-fake-http [

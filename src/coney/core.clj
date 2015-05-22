@@ -60,7 +60,7 @@
 				:let [wanted-keys (select-keys (item wanted) sync-keys)]]
 			(if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
 				(do
-					(println (format "missing/wrong %s for '%s'" kind (name item)))
+					(println (format "missing/wrong %s for '%s' on '%s'" kind (name item) vhost))
 					(expected-code @(http/put
 								   (str @root kind "/" vhost-encoded "/" (name item))
 								   (merge core-params {:body (cheshire/encode wanted-keys)}))
@@ -123,6 +123,14 @@
   )
 )
 
+(defn has-key [coll key]
+  (and (not (nil? (keys coll))) (.contains (keys coll) key))
+)
+
+(defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
+  (sync-config kind (existing-for-vhost (http/url-encode "/")) wanted "/" sync-keys)
+)
+
 (defn -main
   [& args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
@@ -181,6 +189,32 @@
                            [:destination :destination_type :arguments :routing_key :source]
               )
             )
+          )
+          (if (has-key config :permissions)
+              (sync-config-multiple-vhost "permissions"
+                           (get-users-from-api "permissions")
+                           (get-users-from-hash :permissions config)
+                           [:configure :write :read])
+          )
+          (if (has-key config :queues)
+              (sync-config-multiple-vhost "queues"
+                           #(get-names-from-api (str "queues/" %))
+                           (get-names-from-hash :queues config)
+                           [:arguments :durable :auto-delete])
+          )
+          (if (has-key config :exchanges)
+            (sync-config-multiple-vhost "exchanges"
+                         #(get-names-from-api (str "exchanges/" %))
+                         (get-names-from-hash :exchanges config)
+                         [:arguments :internal :type :auto_delete :durable])
+          )
+          (if (has-key config :bindings)
+              (sync-bindings "bindings"
+                           (get-x-from-api get-bindings-from-hash "bindings")
+                           (apply merge (map get-bindings-from-hash (:bindings config)))
+                           "/"
+                           [:destination :destination_type :arguments :routing_key :source]
+              )
           )
           (println "All done")
         )
