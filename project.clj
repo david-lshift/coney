@@ -11,6 +11,9 @@
                  [cheshire "5.4.0"]
                  [org.clojure/tools.cli "0.3.1"]
                  ]
+  :plugins [[lein-bin "0.3.5"]]
+  :bin { :name "coney"
+         :bin-path "target" }
   :profiles {
     :test {
       :dependencies [
