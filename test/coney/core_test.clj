@@ -117,8 +117,8 @@
 
     (fact "Does export-style JSON"
         (with-fake-http [(no-vhost) "{}"
-                         "http://localhost:15672/api/exchanges/%2F" {}
-                         {:method :put :url "http://localhost:15672/api/exchanges/%2F/orders-topic"} {:status 204}]
+                         "http://localhost:15672/api/exchanges/foo" {}
+                         {:method :put :url "http://localhost:15672/api/exchanges/foo/orders-topic"} {:status 204}]
           (with-out-str (with-redefs
           [
             core/file-exists (fn [path] true)

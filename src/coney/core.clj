@@ -128,7 +128,14 @@
 )
 
 (defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
-  (sync-config kind (existing-for-vhost (http/url-encode "/")) wanted "/" sync-keys)
+  (let [wanted-vals (vals wanted)
+        vhosts (distinct (map :vhost wanted-vals))]
+    (doall (for [vhost vhosts :let [
+                                    wanted-for-vhost (filter #(= vhost (:vhost %)) wanted-vals)
+                                    wanted-for-vhost (apply merge (map get-name-from-hash wanted-for-vhost))]]
+      (sync-config kind (existing-for-vhost (http/url-encode vhost)) wanted-for-vhost vhost sync-keys)
+    ))
+  )
 )
 
 (defn -main
