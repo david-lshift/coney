@@ -119,7 +119,7 @@
   (case filetype
     :edn (edn/read-string data)
     :json (cheshire/parse-string data true)
-    (throw (RuntimeException. (format "Don't know file format '%s'" (name filetype))))
+    (exit 1 (error-msg [(format "Don't know file format '%s'" (name filetype))]))
   )
 )
 

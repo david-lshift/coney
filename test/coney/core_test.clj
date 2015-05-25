@@ -75,6 +75,11 @@
                           (core/-main "Foo")
                           )) => (contains "No such file 'Foo'"))
 
+    (fact "Copes with bad filetype" (with-out-str (with-redefs [slurp (fn [& _] "")
+                                                                core/file-exists (fn [path] true)]
+                                      (core/-main "--filetype" "bar" "Foo"))
+                          ) => (every-checker (contains "Don't know file format 'bar'") (contains "Exit with arg: 1")))
+
     (fact "Does alternate host"
           (with-fake-http [(no-vhost "other-host") "{}"]
             (with-out-str (with-redefs [slurp (fn [& _] "{}")
