@@ -55,6 +55,7 @@
     (contains?
      #{ (str "http://localhost:15672/api/queues/" vhost)
         (str "http://localhost:15672/api/exchanges/" vhost)
+        (str "http://localhost:15672/api/bindings/" vhost)
       }
      (:url request)
     )
@@ -142,7 +143,6 @@
       (fact "for Permissions"
             (with-fake-http [(no-vhost) "{}"
                              (for-vhost "some-vhost") "{}"
-                             {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                              {:method :put :url "http://localhost:15672/api/permissions/some-vhost/chef"} {:status 204}]
           (run-with-file "{ \"permissions\": [{
                                \"configure\" : \"\",
@@ -156,7 +156,6 @@
       (fact "for Queues"
           (with-fake-http [(no-vhost) "{}"
                            (for-vhost "some-vhost") "{}"
-                           {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                            {:method :put :url "http://localhost:15672/api/queues/some-vhost/orders.hoxton"} {:status 204}]
             (run-with-file "{\"queues\": [{
                            \"name\" :\"orders.hoxton\",
@@ -169,7 +168,6 @@
       (fact "for Bindings"
           (with-fake-http [(no-vhost) "{}"
                            (for-vhost "some-vhost") "{}"
-                           {:method :put :url "http://localhost:15672/api/vhosts/some-vhost"} {:status 204}
                            {:method :post :url "http://localhost:15672/api/bindings/some-vhost/e/orders/q/orders.hoxton"} {:status 201}]
             (run-with-file "{\"bindings\": [{
                            \"destination\": \"orders.hoxton\",

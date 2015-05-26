@@ -131,25 +131,19 @@
   (and (not (nil? (keys coll))) (.contains (keys coll) key))
 )
 
-(defn sync-config-multiple-vhost-permissions [existing-for-vhost wanted sync-keys]
-  (with-redefs [get-name-from-hash get-user-from-hash] ; hacky workaround as everything else uses get-name-from-hash
-    (sync-config-multiple-vhost "permissions" existing-for-vhost wanted sync-keys)
+(defn sync-config-multiple-vhost-generic [hash-func sync-func kind existing-for-vhost wanted sync-keys]
+  (let [wanted-vals (vals wanted)
+        vhosts (distinct (map :vhost wanted-vals))]
+    (doall (for [vhost vhosts :let [
+                                    wanted-for-vhost (filter #(= vhost (:vhost %)) wanted-vals)
+                                    wanted-for-vhost (apply merge (map hash-func wanted-for-vhost))]]
+      (sync-func kind (existing-for-vhost (http/url-encode vhost)) wanted-for-vhost vhost sync-keys)
+    ))
   )
 )
 
 (defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
-  (let [wanted-vals (vals wanted)
-        vhosts (distinct (map :vhost wanted-vals))]
-    ;(throw (Exception. (format "%s" wanted)))
-    (doall (for [vhost vhosts :let [
-                                    wanted-for-vhost (filter #(= vhost (:vhost %)) wanted-vals)
-                                    wanted-for-vhost (apply merge (map get-name-from-hash wanted-for-vhost))]]
-      (do
-             ;(throw (Exception. (format "%s" (seq vhosts))))
-      (sync-config kind (existing-for-vhost (http/url-encode vhost)) wanted-for-vhost vhost sync-keys)
-      )
-    ))
-  )
+  (sync-config-multiple-vhost-generic get-name-from-hash sync-config kind existing-for-vhost wanted sync-keys)
 )
 
 (defn -main
@@ -212,7 +206,9 @@
             )
           )
           (if (has-key config :permissions)
-              (sync-config-multiple-vhost-permissions
+              (sync-config-multiple-vhost-generic
+                           get-user-from-hash sync-config
+                           "permissions"
                            (fn [& _] (get-users-from-api "permissions"))
                            (get-users-from-hash :permissions config)
                            [:configure :write :read])
@@ -230,10 +226,11 @@
                          [:arguments :internal :type :auto_delete :durable])
           )
           (if (has-key config :bindings)
-              (sync-bindings "bindings"
-                           (get-x-from-api get-bindings-from-hash "bindings")
+              (sync-config-multiple-vhost-generic
+                           get-bindings-from-hash sync-bindings
+                           "bindings"
+                           #(get-x-from-api get-bindings-from-hash (str "bindings/" %))
                            (apply merge (map get-bindings-from-hash (:bindings config)))
-                           "/"
                            [:destination :destination_type :arguments :routing_key :source]
               )
           )
