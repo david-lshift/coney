@@ -113,8 +113,15 @@
              :password \"customer\"}
              {:name \"chef\",
              :password \"chef\"}]}"
-
             (core/-main "Foo")) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'"))))
+
+    (fact "Does Users with no password"
+        (with-fake-http [(no-vhost) "{}"
+                         {:method :put :url "http://localhost:15672/api/users/chef"} {:status 204}]
+          (run-with-file
+            "{:users
+             [{:name \"chef\"}]}"
+            (core/-main "Foo")) => (contains "missing password for user 'chef'")))
 
     (fact "Does JSON"
         (with-fake-http [(no-vhost) "{}"

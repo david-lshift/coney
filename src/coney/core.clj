@@ -165,13 +165,16 @@
           existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str @root "vhosts") core-params) :body (cheshire/decode true)))
           wanted-vhosts (get-names-from-hash :vhosts config)
           ]
-          (doseq [user (keys wanted-users)]
-            (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password (:password (user wanted-users)) (:password_hash (user existing-users)))))
+          (doseq [user (keys wanted-users) :let [wanted-password (:password (user wanted-users))]]
+            (if (nil? wanted-password)
+              (exit 1 (format "missing password for user '%s'" (name user)))
+            )
+            (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password wanted-password (:password_hash (user existing-users)))))
               (do
                 (println (format "missing user '%s'" (name user)))
                 (expected-code @(http/put
                                  (str @root "users/" (name user))
-                                 (merge core-params {:body (cheshire/encode {:tags "" :password (:password (user wanted-users))})}))
+                                 (merge core-params {:body (cheshire/encode {:tags "" :password wanted-password})}))
                                204)
                 )
               )

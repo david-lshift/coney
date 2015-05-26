@@ -10,4 +10,8 @@
     (rp/check-rabbit-password "customer" "aaaaaaaaaaaaaaaaaaaaaaaaaaaa") => false)
   (fact "Password checking works for empty hash"
     (rp/check-rabbit-password "customer" "") => false)
+  (fact "Password checking works for null hash"
+    (rp/check-rabbit-password "customer" nil) => false)
+  (fact "Password checking works for null password"
+    (rp/check-rabbit-password nil "foo") => false)
 )
