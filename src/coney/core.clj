@@ -131,6 +131,12 @@
   (and (not (nil? (keys coll))) (.contains (keys coll) key))
 )
 
+(defn sync-config-multiple-vhost-permissions [existing-for-vhost wanted sync-keys]
+  (with-redefs [get-name-from-hash get-user-from-hash] ; hacky workaround as everything else uses get-name-from-hash
+    (sync-config-multiple-vhost "permissions" existing-for-vhost wanted sync-keys)
+  )
+)
+
 (defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
   (let [wanted-vals (vals wanted)
         vhosts (distinct (map :vhost wanted-vals))]
@@ -206,7 +212,7 @@
             )
           )
           (if (has-key config :permissions)
-              (sync-config-multiple-vhost "permissions"
+              (sync-config-multiple-vhost-permissions
                            (fn [& _] (get-users-from-api "permissions"))
                            (get-users-from-hash :permissions config)
                            [:configure :write :read])
