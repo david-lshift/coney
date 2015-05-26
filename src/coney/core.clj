@@ -47,17 +47,21 @@
 )
 
 (defn get-names-from-hash [key config]
-  (apply merge (map get-name-from-hash (key config)))
+  (apply merge {} (map get-name-from-hash (key config {})))
 )
 
 (defn get-users-from-hash [key config]
-  (apply merge (map get-user-from-hash (key config)))
+  (apply merge {} (map get-user-from-hash (key config {})))
 )
 
 (defn sync-config [kind existing wanted vhost sync-keys]
 	(let [vhost-encoded (http/url-encode (name vhost))]
+    (if (and (not (empty? wanted)) (nil? (-> wanted keys first)))
+      (throw (Exception. (format "%s %s %s %s" wanted existing vhost kind)))
+    )
 		(doseq [item (keys wanted)
 				:let [wanted-keys (select-keys (item wanted) sync-keys)]]
+      ;(throw (Exception. (format "%s" wanted-keys)))
 			(if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
 				(do
 					(println (format "missing/wrong %s for '%s' on '%s'" kind (name item) vhost))
@@ -115,9 +119,12 @@
   (.exists (clojure.java.io/as-file path))
 )
 
-(defn parse-file [filetype data]
+(defn parse-file [filetype fname data]
   (case filetype
-    :edn (edn/read-string data)
+    :edn (try
+           (edn/read-string data)
+           (catch RuntimeException e (exit 1 (format "Bad EDN file '%s'" fname)))
+         )
     :json (cheshire/parse-string data true)
     (exit 1 (error-msg [(format "Don't know file format '%s'" (name filetype))]))
   )
@@ -127,15 +134,19 @@
   (and (not (nil? (keys coll))) (.contains (keys coll) key))
 )
 
-(defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
+(defn sync-config-multiple-vhost-generic [hash-func sync-func kind existing-for-vhost wanted sync-keys]
   (let [wanted-vals (vals wanted)
         vhosts (distinct (map :vhost wanted-vals))]
     (doall (for [vhost vhosts :let [
                                     wanted-for-vhost (filter #(= vhost (:vhost %)) wanted-vals)
-                                    wanted-for-vhost (apply merge (map get-name-from-hash wanted-for-vhost))]]
-      (sync-config kind (existing-for-vhost (http/url-encode vhost)) wanted-for-vhost vhost sync-keys)
+                                    wanted-for-vhost (apply merge (map hash-func wanted-for-vhost))]]
+      (sync-func kind (existing-for-vhost (http/url-encode vhost)) wanted-for-vhost vhost sync-keys)
     ))
   )
+)
+
+(defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
+  (sync-config-multiple-vhost-generic get-name-from-hash sync-config kind existing-for-vhost wanted sync-keys)
 )
 
 (defn -main
@@ -147,19 +158,23 @@
         errors (exit 1 (error-msg errors))
         (not= (count arguments) 1) (exit 1 (format "Need a single file argument, but got %d arguments" (count arguments)))
         (not (file-exists (first arguments))) (exit 1 (error-msg [(format "No such file '%s'" (first arguments))]))
-        :default (let [config (->> arguments first slurp (parse-file (:filetype options)))
+        :default (let [fname (first arguments)
+          config (parse-file (:filetype options) fname (slurp fname))
           existing-users (get-names-from-api "users")
           wanted-users (get-names-from-hash :users config)
           existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str @root "vhosts") core-params) :body (cheshire/decode true)))
           wanted-vhosts (get-names-from-hash :vhosts config)
           ]
-          (doseq [user (keys wanted-users)]
-            (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password (:password (user wanted-users)) (:password_hash (user existing-users)))))
+          (doseq [user (keys wanted-users) :let [wanted-password (:password (user wanted-users))]]
+            (if (nil? wanted-password)
+              (exit 1 (format "missing password for user '%s'" (name user)))
+            )
+            (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password wanted-password (:password_hash (user existing-users)))))
               (do
                 (println (format "missing user '%s'" (name user)))
                 (expected-code @(http/put
                                  (str @root "users/" (name user))
-                                 (merge core-params {:body (cheshire/encode {:tags "" :password (:password (user wanted-users))})}))
+                                 (merge core-params {:body (cheshire/encode {:tags "" :password wanted-password})}))
                                204)
                 )
               )
@@ -198,8 +213,10 @@
             )
           )
           (if (has-key config :permissions)
-              (sync-config-multiple-vhost "permissions"
-                           (get-users-from-api "permissions")
+              (sync-config-multiple-vhost-generic
+                           get-user-from-hash sync-config
+                           "permissions"
+                           (fn [& _] (get-users-from-api "permissions"))
                            (get-users-from-hash :permissions config)
                            [:configure :write :read])
           )
@@ -216,10 +233,11 @@
                          [:arguments :internal :type :auto_delete :durable])
           )
           (if (has-key config :bindings)
-              (sync-bindings "bindings"
-                           (get-x-from-api get-bindings-from-hash "bindings")
+              (sync-config-multiple-vhost-generic
+                           get-bindings-from-hash sync-bindings
+                           "bindings"
+                           #(get-x-from-api get-bindings-from-hash (str "bindings/" %))
                            (apply merge (map get-bindings-from-hash (:bindings config)))
-                           "/"
                            [:destination :destination_type :arguments :routing_key :source]
               )
           )

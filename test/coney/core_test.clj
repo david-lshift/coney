@@ -16,6 +16,9 @@
   )
 )
 
+(fact "get-users-from-hash returns empty"
+  (core/get-users-from-hash :foo {}) => {})
+
 (fact "Get-bindings works"
   (core/get-bindings-from-hash {:destination "orders.hoxton",
          :destination_type "queue",
@@ -52,8 +55,21 @@
     (contains?
      #{ (str "http://localhost:15672/api/queues/" vhost)
         (str "http://localhost:15672/api/exchanges/" vhost)
+        (str "http://localhost:15672/api/bindings/" vhost)
       }
      (:url request)
+    )
+  )
+)
+
+(defmacro run-with-file [content & func]
+  `(with-out-str
+    (with-redefs
+      [
+       slurp (fn [& _#] ~content)
+       core/file-exists (fn [path#] true)
+      ]
+        ~@func
     )
   )
 )
@@ -75,68 +91,103 @@
                           (core/-main "Foo")
                           )) => (contains "No such file 'Foo'"))
 
-    (fact "Copes with bad filetype" (with-out-str (with-redefs [slurp (fn [& _] "")
-                                                                core/file-exists (fn [path] true)]
-                                      (core/-main "--filetype" "bar" "Foo"))
-                          ) => (every-checker (contains "Don't know file format 'bar'") (contains "Exit with arg: 1")))
+    (fact "Copes with bad filetype" (run-with-file "" (core/-main "--filetype" "bar" "Foo"))
+                           => (every-checker (contains "Don't know file format 'bar'") (contains "Exit with arg: 1")))
+
+    (fact "Copes with bad edn" (run-with-file "{\"json\": \"not-edn\"}" (core/-main "Foo"))
+                           => (every-checker (contains "Bad EDN file 'Foo'") (contains "Exit with arg: 1")))
 
     (fact "Does alternate host"
           (with-fake-http [(no-vhost "other-host") "{}"]
-            (with-out-str (with-redefs [slurp (fn [& _] "{}")
-                                        core/file-exists (fn [path] true)]
-                            (core/-main "--host" "other-host" "Foo")
-                            )))
+            (run-with-file "{}" (core/-main "--host" "other-host" "Foo"))
+          )
             => "All done\n")
 
     (fact "Does Users"
         (with-fake-http [(no-vhost) "{}"
                          {:method :put :url "http://localhost:15672/api/users/customer"} {:status 204}
                          {:method :put :url "http://localhost:15672/api/users/chef"} {:status 204}]
-          (with-out-str (with-redefs
-            [
-             core/file-exists (fn [path] true)
-             slurp (fn [& _] "{
-                     :users
-                     [{:name \"customer\",
-                     :password \"customer\"}
-                     {:name \"chef\",
-                     :password \"chef\"}]}")
-             ]
-            (core/-main "Foo")))) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'")))
+          (run-with-file
+            "{:users
+             [{:name \"customer\",
+             :password \"customer\"}
+             {:name \"chef\",
+             :password \"chef\"}]}"
+            (core/-main "Foo")) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'"))))
+
+    (fact "Does Users with no password"
+        (with-fake-http [(no-vhost) "{}"
+                         {:method :put :url "http://localhost:15672/api/users/chef"} {:status 204}]
+          (run-with-file
+            "{:users
+             [{:name \"chef\"}]}"
+            (core/-main "Foo")) => (contains "missing password for user 'chef'")))
 
     (fact "Does JSON"
         (with-fake-http [(no-vhost) "{}"
                          {:method :put :url "http://localhost:15672/api/users/customer"} {:status 204}
                          {:method :put :url "http://localhost:15672/api/users/chef"} {:status 204}]
-          (with-out-str (with-redefs
-            [
-             core/file-exists (fn [path] true)
-             slurp (fn [& _] "{
+          (run-with-file "{
                      \"users\" :
                      [{\"name\" : \"customer\",
                      \"password\" : \"customer\"},
                      {\"name\" : \"chef\",
-                     \"password\" : \"chef\"}]}")
-             ]
-            (core/-main "--filetype" "json" "Foo")))) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'")))
+                     \"password\" : \"chef\"}]}"
+            (core/-main "--filetype" "json" "Foo"))) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'")))
 
     (fact "Does export-style JSON"
+      (fact "for exchanges"
         (with-fake-http [(no-vhost) "{}"
                          "http://localhost:15672/api/exchanges/foo" {}
                          {:method :put :url "http://localhost:15672/api/exchanges/foo/orders-topic"} {:status 204}]
-          (with-out-str (with-redefs
-          [
-            core/file-exists (fn [path] true)
-            slurp (fn [& _] "{\"exchanges\" : [ {
+          (run-with-file "{\"exchanges\" : [ {
          \"vhost\" : \"foo\",
          \"durable\" : true,
          \"internal\" : false,
          \"arguments\" : {},
          \"type\" : \"topic\",
          \"auto_delete\" : false,
-         \"name\" : \"orders-topic\"}]}")
-             ]
-            (core/-main "--filetype" "json" "Foo")))) => (every-checker (contains "missing/wrong exchanges for 'orders-topic' on 'foo'")))
+         \"name\" : \"orders-topic\"}]}"
+            (core/-main "--filetype" "json" "Foo"))) => (every-checker (contains "missing/wrong exchanges for 'orders-topic' on 'foo'")))
+
+      (fact "for Permissions"
+            (with-fake-http [(no-vhost) "{}"
+                             (for-vhost "some-vhost") "{}"
+                             {:method :put :url "http://localhost:15672/api/permissions/some-vhost/chef"} {:status 204}]
+          (run-with-file "{ \"permissions\": [{
+                               \"configure\" : \"\",
+                               \"write\": \"\",
+                               \"user\": \"chef\",
+                               \"read\": \"orders\",
+                               \"vhost\": \"some-vhost\"
+                               }]}"
+              (core/-main "--filetype" "json" "Foo"))) => (contains "missing/wrong permissions for 'chef'"))
+
+      (fact "for Queues"
+          (with-fake-http [(no-vhost) "{}"
+                           (for-vhost "some-vhost") "{}"
+                           {:method :put :url "http://localhost:15672/api/queues/some-vhost/orders.hoxton"} {:status 204}]
+            (run-with-file "{\"queues\": [{
+                           \"name\" :\"orders.hoxton\",
+                             \"arguments\": \"{}\",
+                             \"durable\" : true,
+                             \"auto_delete\": false,
+                             \"vhost\": \"some-vhost\"}]}"
+                (core/-main "--filetype" "json" "Foo"))) => (contains "missing/wrong queues for 'orders.hoxton'"))
+
+      (fact "for Bindings"
+          (with-fake-http [(no-vhost) "{}"
+                           (for-vhost "some-vhost") "{}"
+                           {:method :post :url "http://localhost:15672/api/bindings/some-vhost/e/orders/q/orders.hoxton"} {:status 201}]
+            (run-with-file "{\"bindings\": [{
+                           \"destination\": \"orders.hoxton\",
+                             \"destination_type\": \"queue\",
+                             \"arguments\": \"{}\",
+                             \"routing_key\": \"\",
+                             \"source\": \"orders\",
+                             \"vhost\": \"some-vhost\"}]}"
+                (core/-main "--filetype" "json" "Foo"))) => (contains "missing/wrong bindings for 'orders.hoxton-queue-{}--orders'"))
+    ) ; end "Does export-style JSON"
 
     (fact "Does VHosts"
           (with-fake-http [
