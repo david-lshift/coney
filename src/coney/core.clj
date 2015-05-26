@@ -56,8 +56,12 @@
 
 (defn sync-config [kind existing wanted vhost sync-keys]
 	(let [vhost-encoded (http/url-encode (name vhost))]
+    (if (and (not (empty? wanted)) (nil? (-> wanted keys first)))
+      (throw (Exception. (format "%s %s %s %s" wanted existing vhost kind)))
+    )
 		(doseq [item (keys wanted)
 				:let [wanted-keys (select-keys (item wanted) sync-keys)]]
+      ;(throw (Exception. (format "%s" wanted-keys)))
 			(if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
 				(do
 					(println (format "missing/wrong %s for '%s' on '%s'" kind (name item) vhost))
@@ -130,10 +134,14 @@
 (defn sync-config-multiple-vhost [kind existing-for-vhost wanted sync-keys]
   (let [wanted-vals (vals wanted)
         vhosts (distinct (map :vhost wanted-vals))]
+    ;(throw (Exception. (format "%s" wanted)))
     (doall (for [vhost vhosts :let [
                                     wanted-for-vhost (filter #(= vhost (:vhost %)) wanted-vals)
                                     wanted-for-vhost (apply merge (map get-name-from-hash wanted-for-vhost))]]
+      (do
+             ;(throw (Exception. (format "%s" (seq vhosts))))
       (sync-config kind (existing-for-vhost (http/url-encode vhost)) wanted-for-vhost vhost sync-keys)
+      )
     ))
   )
 )
@@ -199,7 +207,7 @@
           )
           (if (has-key config :permissions)
               (sync-config-multiple-vhost "permissions"
-                           (get-users-from-api "permissions")
+                           (fn [& _] (get-users-from-api "permissions"))
                            (get-users-from-hash :permissions config)
                            [:configure :write :read])
           )
