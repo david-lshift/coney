@@ -56,12 +56,8 @@
 
 (defn sync-config [kind existing wanted vhost sync-keys]
 	(let [vhost-encoded (http/url-encode (name vhost))]
-    (if (and (not (empty? wanted)) (nil? (-> wanted keys first)))
-      (throw (Exception. (format "%s %s %s %s" wanted existing vhost kind)))
-    )
 		(doseq [item (keys wanted)
 				:let [wanted-keys (select-keys (item wanted) sync-keys)]]
-      ;(throw (Exception. (format "%s" wanted-keys)))
 			(if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
 				(do
 					(println (format "missing/wrong %s for '%s' on '%s'" kind (name item) vhost))
