@@ -94,6 +94,9 @@
     (fact "Copes with bad filetype" (run-with-file "" (core/-main "--filetype" "bar" "Foo"))
                            => (every-checker (contains "Don't know file format 'bar'") (contains "Exit with arg: 1")))
 
+    (fact "Copes with bad edn" (run-with-file "{\"json\": \"not-edn\"}" (core/-main "Foo"))
+                           => (every-checker (contains "Bad EDN file 'Foo'") (contains "Exit with arg: 1")))
+
     (fact "Does alternate host"
           (with-fake-http [(no-vhost "other-host") "{}"]
             (run-with-file "{}" (core/-main "--host" "other-host" "Foo"))

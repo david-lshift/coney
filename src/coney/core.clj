@@ -119,9 +119,12 @@
   (.exists (clojure.java.io/as-file path))
 )
 
-(defn parse-file [filetype data]
+(defn parse-file [filetype fname data]
   (case filetype
-    :edn (edn/read-string data)
+    :edn (try
+           (edn/read-string data)
+           (catch RuntimeException e (exit 1 (format "Bad EDN file '%s'" fname)))
+         )
     :json (cheshire/parse-string data true)
     (exit 1 (error-msg [(format "Don't know file format '%s'" (name filetype))]))
   )
@@ -155,7 +158,8 @@
         errors (exit 1 (error-msg errors))
         (not= (count arguments) 1) (exit 1 (format "Need a single file argument, but got %d arguments" (count arguments)))
         (not (file-exists (first arguments))) (exit 1 (error-msg [(format "No such file '%s'" (first arguments))]))
-        :default (let [config (->> arguments first slurp (parse-file (:filetype options)))
+        :default (let [fname (first arguments)
+          config (parse-file (:filetype options) fname (slurp fname))
           existing-users (get-names-from-api "users")
           wanted-users (get-names-from-hash :users config)
           existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str @root "vhosts") core-params) :body (cheshire/decode true)))
