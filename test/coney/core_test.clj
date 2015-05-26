@@ -16,6 +16,9 @@
   )
 )
 
+(fact "get-users-from-hash returns empty"
+  (core/get-users-from-hash :foo {}) => {})
+
 (fact "Get-bindings works"
   (core/get-bindings-from-hash {:destination "orders.hoxton",
          :destination_type "queue",

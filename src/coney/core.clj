@@ -47,11 +47,11 @@
 )
 
 (defn get-names-from-hash [key config]
-  (apply merge (map get-name-from-hash (key config)))
+  (apply merge {} (map get-name-from-hash (key config {})))
 )
 
 (defn get-users-from-hash [key config]
-  (apply merge (map get-user-from-hash (key config)))
+  (apply merge {} (map get-user-from-hash (key config {})))
 )
 
 (defn sync-config [kind existing wanted vhost sync-keys]
