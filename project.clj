@@ -1,4 +1,4 @@
-(defproject coney "0.1.0-SNAPSHOT"
+(defproject coney "1.0-SNAPSHOT"
   :description "FIXME: write description"
   :url "https://github.com/lshift/coney"
   :license {:name "Mozilla Public License Version 1.1"
@@ -11,7 +11,11 @@
                  [cheshire "5.4.0"]
                  [org.clojure/tools.cli "0.3.1"]
                  ]
-  :plugins [[lein-bin "0.3.5"]]
+  :plugins [
+            [lein-bin "0.3.5"]
+            [lein-release "1.0.5"]
+          ]
+  :lein-release {:deploy-via :shell :shell ["lein" "bin"]}
   :bin { :name "coney"
          :bin-path "target" }
   :profiles {
