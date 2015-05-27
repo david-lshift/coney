@@ -94,7 +94,7 @@
     (fact "Copes with bad filetype" (run-with-file "" (core/-main "--filetype" "bar" "Foo"))
                            => (every-checker (contains "Don't know file format 'bar'") (contains "Exit with arg: 1")))
 
-    (fact "Copes with bad edn" (run-with-file "{\"json\": \"not-edn\"}" (core/-main "Foo"))
+    (fact "Copes with bad edn" (run-with-file "{\"json\": \"not-edn\"}" (core/-main "--filetype" "edn" "Foo"))
                            => (every-checker (contains "Bad EDN file 'Foo'") (contains "Exit with arg: 1")))
 
     (fact "Does alternate host"
@@ -120,7 +120,7 @@
              :password \"customer\"}
              {:name \"chef\",
              :password \"chef\"}]}"
-            (core/-main "Foo")) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'"))))
+            (core/-main "--filetype" "edn" "Foo")) => (every-checker (contains "missing user 'customer'") (contains "missing user 'chef'"))))
 
     (fact "Does Users with no password"
         (with-fake-http [(no-vhost) "{}"
@@ -128,7 +128,7 @@
           (run-with-file
             "{:users
              [{:name \"chef\"}]}"
-            (core/-main "Foo")) => (contains "missing password for user 'chef'")))
+            (core/-main "--filetype" "edn" "Foo")) => (contains "missing password for user 'chef'")))
 
     (fact "Does JSON"
         (with-fake-http [(no-vhost) "{}"
@@ -206,7 +206,7 @@
              core/file-exists (fn [path] true)
              slurp (fn [& _] "{:vhosts [{:name \"some-vhost\"}]}")
              ]
-            (core/-main "Foo")))) => (contains "missing vhost 'some-vhost"))
+            (core/-main "--filetype" "edn" "Foo")))) => (contains "missing vhost 'some-vhost"))
 
     (fact "Does Existing VHosts"
           (with-fake-http ["http://localhost:15672/api/vhosts" "[{\"name\":\"some-vhost\"}]"
@@ -218,7 +218,7 @@
              core/file-exists (fn [path] true)
              slurp (fn [& _] "{:vhosts [{:name \"some-vhost\"}]}")
              ]
-            (core/-main "Foo")))) => "All done\n")
+            (core/-main "--filetype" "edn" "Foo")))) => "All done\n")
 
     (fact "Does Permissions"
           (with-fake-http [(no-vhost) "{}"
@@ -238,7 +238,7 @@
                              :read \"orders\",
                              }]}]}")
              ]
-            (core/-main "Foo")))) => (contains "missing/wrong permissions for 'chef'"))
+            (core/-main "--filetype" "edn" "Foo")))) => (contains "missing/wrong permissions for 'chef'"))
 
     (fact "Does Queues"
         (with-fake-http [(no-vhost) "{}"
@@ -257,7 +257,7 @@
                            :durable true,
                            :auto_delete false}]}]}")
                ]
-              (core/-main "Foo"))) => (contains "missing/wrong queues for 'orders.hoxton'")))
+              (core/-main "--filetype" "edn" "Foo"))) => (contains "missing/wrong queues for 'orders.hoxton'")))
 
     (fact "Does Exchanges"
         (with-fake-http [(no-vhost) "{}"
@@ -278,7 +278,7 @@
                            :auto_delete false,
                            :durable true}]}]}")
                ]
-              (core/-main "Foo"))) => (contains "missing/wrong exchanges for 'orders-topic'")))
+              (core/-main "--filetype" "edn" "Foo"))) => (contains "missing/wrong exchanges for 'orders-topic'")))
 
     (fact "Does Bindings"
         (with-fake-http [(no-vhost) "{}"
@@ -298,6 +298,6 @@
                            :routing_key \"\",
                            :source \"orders\"}]}]}")
                ]
-              (core/-main "Foo"))) => (contains "missing/wrong bindings for 'orders.hoxton-queue-{}--orders'")))
+              (core/-main "--filetype" "edn" "Foo"))) => (contains "missing/wrong bindings for 'orders.hoxton-queue-{}--orders'")))
   )
 )

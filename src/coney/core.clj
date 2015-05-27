@@ -98,7 +98,7 @@
 (def cli-options [
                   ["-h" "--help"]
                   [nil "--host HOST" :default "localhost"]
-                  ["-f" "--filetype FILETYPE" :default :edn :parse-fn #(keyword %)]
+                  ["-f" "--filetype FILETYPE" :default :json :parse-fn #(keyword %)]
                   [nil "--username USERNAME" :default "guest"]
                   [nil "--password PASSWORD" :default "guest"]
                   ])
