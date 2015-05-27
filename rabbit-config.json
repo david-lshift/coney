@@ -1,0 +1,89 @@
+{
+   "exchanges" : [
+      {
+         "internal" : false,
+         "durable" : true,
+         "name" : "orders-topic",
+         "vhost" : "/",
+         "arguments" : {},
+         "type" : "topic",
+         "auto_delete" : false
+      },
+      {
+         "auto_delete" : false,
+         "type" : "direct",
+         "arguments" : {},
+         "vhost" : "/",
+         "durable" : true,
+         "internal" : false,
+         "name" : "orders"
+      },
+      {
+         "name" : "orders-headers",
+         "internal" : false,
+         "durable" : true,
+         "vhost" : "/",
+         "arguments" : {},
+         "type" : "headers",
+         "auto_delete" : false
+      }
+   ],
+   "rabbit_version" : "3.3.0",
+   "users" : [
+      {
+         "tags" : "",
+         "password" : "customer",
+         "name" : "customer"
+      },
+      {
+         "name" : "chef",
+         "password" : "chef",
+         "tags" : ""
+      }
+   ],
+   "permissions" : [
+      {
+         "read" : ".*",
+         "write" : ".*",
+         "vhost" : "/",
+         "configure" : ".*",
+         "user" : "guest"
+      },
+      {
+         "user" : "chef",
+         "configure" : "",
+         "vhost" : "/",
+         "write" : "",
+         "read" : "orders.hoxton"
+      },
+      {
+         "read" : "",
+         "write" : "orders",
+         "vhost" : "/",
+         "user" : "customer",
+         "configure" : ""
+      }
+   ],
+   "queues" : [
+      {
+         "arguments" : {},
+         "vhost" : "/",
+         "auto_delete" : false,
+         "name" : "foo",
+         "durable" : true
+      },
+      {
+         "durable" : true,
+         "name" : "orders.hoxton",
+         "auto_delete" : false,
+         "vhost" : "/",
+         "arguments" : {}
+      }
+   ],
+   "bindings" : [],
+   "vhosts" : [
+      {
+         "name" : "/"
+      }
+   ]
+}
