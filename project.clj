@@ -22,7 +22,7 @@
       ]
       :plugins [
         [lein-midje "3.1.3"]
-        [lein-cloverage "1.0.2"]
+        [lein-cloverage "1.0.6"]
       ]
     }
     :dev [:test
