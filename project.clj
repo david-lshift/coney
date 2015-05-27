@@ -1,4 +1,4 @@
-(defproject coney "1.0-SNAPSHOT"
+(defproject coney "1.0"
   :description "FIXME: write description"
   :url "https://github.com/lshift/coney"
   :license {:name "Mozilla Public License Version 1.1"
