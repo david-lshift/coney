@@ -103,6 +103,13 @@
           )
             => "All done\n")
 
+    (fact "Does alternate login"
+          (with-fake-http [#(if (= (:basic-auth %) ["test_user" "test_password"]) true (throw (Exception. (format "Auth was %s" (:basic-auth %)))))
+                           (fn [orig-fn opts callback] {:status 200})]
+            (run-with-file "{}" (core/-main "--username" "test_user" "--password" "test_password" "Foo"))
+          )
+            => "All done\n")
+
     (fact "Does Users"
         (with-fake-http [(no-vhost) "{}"
                          {:method :put :url "http://localhost:15672/api/users/customer"} {:status 204}
