@@ -9,6 +9,15 @@
 
 (def root (atom "http://localhost:15672/api/"))
 
+;; (alter-var-root
+;;  #'http/get
+;;  (fn [getfn]
+;;    (fn [& args]
+;;      (println 'http/get args)
+;;      (let [result (apply getfn args)]
+;;        (println @result)
+;;        result))))
+
 (defn get-key-from-hash [key hash]
   (hash-map (keyword (key hash)) hash))
 
@@ -50,11 +59,13 @@
             :let [wanted-keys (select-keys (item wanted) sync-keys)]]
       (if (or (not (contains? existing item)) (not= wanted-keys (select-keys (item existing) sync-keys)))
         (do
-          (println (format "missing/wrong %s for '%s' on '%s'" kind (name item) vhost))
+          (println (format "missing/wrong %s for '%s' on '%s'" kind (name item) vhost)  wanted-keys (select-keys (item existing) sync-keys))
           (expected-code @(http/put
                            (str @root kind "/" vhost-encoded "/" (name item))
                            (merge (core-params) {:body (cheshire/encode wanted-keys)}))
-                         204))))))
+                         204))
+        (do
+          (println (format "matching %s for '%s' on '%s'" kind (name item) vhost)))))))
 
 (defn sync-bindings [kind existing wanted vhost sync-keys]
   (let [vhost-encoded (http/url-encode (name vhost))]
@@ -103,6 +114,10 @@
 (defn has-key [coll key]
   (and (not (nil? (keys coll))) (.contains (keys coll) key)))
 
+
+(defn filter-by-vhost [vhost objects]
+  (filter #(= vhost (:vhost %)) objects))
+
 (defn sync-config-multiple-vhost-generic [hash-func sync-func kind existing-for-vhost wanted sync-keys]
   (let [wanted-vals (vals wanted)
         vhosts (distinct (map :vhost wanted-vals))]
@@ -127,18 +142,22 @@
                      config (parse-file (:filetype options) fname (slurp fname))
                      existing-users (get-names-from-api "users")
                      wanted-users (get-names-from-hash :users config)
-                     existing-vhosts (map #(keyword (:name %)) (-> @(http/get (str @root "vhosts") (core-params)) :body (cheshire/decode true)))
+                     existing-vhosts (map #(keyword (:name %))
+                                          (-> @(http/get (str @root "vhosts") (core-params)) :body (cheshire/decode true)))
                      wanted-vhosts (get-names-from-hash :vhosts config)]
+
                  (doseq [user (keys wanted-users) :let [wanted-password (:password (user wanted-users))]]
                    (if (nil? wanted-password)
                      (exit 1 (format "missing password for user '%s'" (name user))))
-                   (if (or (not (contains? existing-users user)) (not (rp/check-rabbit-password wanted-password (:password_hash (user existing-users)))))
+                   (if (or (not (contains? existing-users user))
+                           (not (rp/check-rabbit-password wanted-password (:password_hash (user existing-users)))))
                      (do
                        (println (format "missing user '%s'" (name user)))
                        (expected-code @(http/put
                                         (str @root "users/" (name user))
                                         (merge (core-params) {:body (cheshire/encode {:tags "" :password wanted-password})}))
                                       204))))
+
                  (doseq [vhost (keys wanted-vhosts)]
                    (if (not (.contains existing-vhosts vhost))
                      (do
@@ -167,12 +186,16 @@
                                     vhost
                                     [:destination :destination_type :arguments :routing_key :source])))
                  (if (has-key config :permissions)
-                   (sync-config-multiple-vhost-generic
-                    get-user-from-hash sync-config
-                    "permissions"
-                    (fn [& _] (get-users-from-api "permissions"))
-                    (get-users-from-hash :permissions config)
-                    [:configure :write :read]))
+                   (do
+                     (let [permissions (get-users-from-api "permissions")]
+                       (clojure.pprint/pprint permissions)
+                       (sync-config-multiple-vhost-generic
+                        get-user-from-hash
+                        sync-config
+                        "permissions"
+                        (fn [vhost] (into {} (filter (fn [[k v]] (= (:vhost v) vhost)) permissions)))
+                        (get-users-from-hash :permissions config)
+                      [:configure :write :read]))))
                  (if (has-key config :queues)
                    (sync-config-multiple-vhost "queues"
                                                #(get-names-from-api (str "queues/" %))
