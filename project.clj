@@ -14,6 +14,8 @@
   :plugins [
             [lein-bin "0.3.5"]
             [lein-release "1.0.5"]
+            [lein2-eclipse "2.0.0"]
+            [lein-cljfmt "0.5.6"]
           ]
   :lein-release {:deploy-via :shell :shell ["lein" "bin"]}
   :bin { :name "coney"
